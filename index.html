@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Árbol Pitagórico 3D - Fractales Escalares Mejorado</title>
+    <style>
+        *
+        {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body
+        {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 100%);
+            color: #e0e0e0;
+            overflow: hidden;
+        }
+
+        #container
+        {
+            display: flex;
+            height: 100vh;
+        }
+
+        #canvas-container
+        {
+            flex: 1;
+            position: relative;
+        }
+
+        canvas
+        {
+            display: block;
+            width: 100%;
+            height: 100%;
+            cursor: grab;
+            border: 2px solid rgba(100, 150, 255, 0.3);
+        }
+
+        canvas:active
+        {
+            cursor: grabbing;
+        }
+
+        #controls
+        {
+            width: 350px;
+            background: rgba(15, 20, 40, 0.95);
+            padding: 25px;
+            overflow-y: auto;
+            box-shadow: -5px 0 20px rgba(0, 0, 0, 0.5);
+            border-left: 2px solid rgba(100, 150, 255, 0.3);
+        }
+
+        h1
+        {
+            font-size: 24px;
+            margin-bottom: 10px;
+            color: #64b5f6;
+            text-shadow: 0 0 10px rgba(100, 181, 246, 0.5);
+        }
+
+        .subtitle
+        {
+            font-size: 12px;
+            color: #90caf9;
+            margin-bottom: 25px;
+            font-style: italic;
+        }
+
+        .control-group
+        {
+            margin-bottom: 25px;
+            padding: 15px;
+            background: rgba(30, 40, 70, 0.5);
+            border-radius: 8px;
+            border: 1px solid rgba(100, 150, 255, 0.2);
+        }
+
+        label
+        {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #b3e5fc;
+            font-size: 14px;
+        }
+
+        .value-display
+        {
+            float: right;
+            color: #64b5f6;
+            font-weight: bold;
+        }
+
+        input[type="range"]
+        {
+            width: 100%;
+            height: 6px;
+            background: rgba(100, 150, 255, 0.2);
+            outline: none;
+            border-radius: 3px;
+            -webkit-appearance: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb
+        {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            background: #64b5f6;
+            cursor: pointer;
+            border-radius: 50%;
+            box-shadow: 0 0 10px rgba(100, 181, 246, 0.7);
+        }
+
+        input[type="range"]::-moz-range-thumb
+        {
+            width: 18px;
+            height: 18px;
+            background: #64b5f6;
+            cursor: pointer;
+            border-radius: 50%;
+            box-shadow: 0 0 10px rgba(100, 181, 246, 0.7);
+        }
+
+        button
+        {
+            width: 100%;
+            padding: 12px;
+            margin-top: 10px;
+            background: linear-gradient(135deg, #1e88e5 0%, #1565c0 100%);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s;
+            box-shadow: 0 4px 15px rgba(30, 136, 229, 0.3);
+        }
+
+        button:hover
+        {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(30, 136, 229, 0.5);
+        }
+
+        .info-box
+        {
+            background: rgba(100, 181, 246, 0.1);
+            padding: 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            line-height: 1.6;
+            border-left: 3px solid #64b5f6;
+            margin-top: 20px;
+        }
+
+        .stats
+        {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .stat-item
+        {
+            background: rgba(30, 40, 70, 0.7);
+            padding: 10px;
+            border-radius: 6px;
+            text-align: center;
+        }
+
+        .stat-value
+        {
+            font-size: 20px;
+            font-weight: bold;
+            color: #64b5f6;
+        }
+
+        .stat-label
+        {
+            font-size: 11px;
+            color: #90caf9;
+            margin-top: 5px;
+        }
+
+        #loading
+        {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: #64b5f6;
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="canvas-container">
+            <canvas id="gl-canvas" width="800" height="600">
+                Oops... tu navegador no soporta WebGL
+            </canvas>
+            <div id="loading">Inicializando WebGL...</div>
+        </div>
+
+        <div id="controls">
+            <h1>Árbol Pitagórico 3D Mejorado</h1>
+            <div class="subtitle">Fractales Escalares - Mandelbrot</div>
+
+            <div class="control-group">
+                <label>
+                    Factor de Escala (r)
+                    <span class="value-display" id="scaleValue">0.70</span>
+                </label>
+                <input type="range" id="scaleFactor" min="0.4" max="0.85" step="0.01" value="0.70">
+                <div style="font-size: 11px; color: #90caf9; margin-top: 5px;">
+                    Controla la autosimilitud fractal
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>
+                    Ángulo de Divergencia (θ)
+                    <span class="value-display" id="angleValue">35°</span>
+                </label>
+                <input type="range" id="angle" min="15" max="60" step="1" value="35">
+                <div style="font-size: 11px; color: #90caf9; margin-top: 5px;">
+                    Ángulo de apertura entre ramas
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>
+                    Profundidad Recursiva (n)
+                    <span class="value-display" id="depthValue">8</span>
+                </label>
+                <input type="range" id="depth" min="1" max="11" step="1" value="8">
+                <div style="font-size: 11px; color: #90caf9; margin-top: 5px;">
+                    Número de iteraciones fractales
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>
+                    Número de Ramas
+                    <span class="value-display" id="branchCountValue">2</span>
+                </label>
+                <input type="range" id="branchCount" min="2" max="5" step="1" value="2">
+                <div style="font-size: 11px; color: #90caf9; margin-top: 5px;">
+                    Número de ramas por nodo
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>
+                    Densidad de Hojas
+                    <span class="value-display" id="leafDensityValue">0.8</span>
+                </label>
+                <input type="range" id="leafDensity" min="0" max="1" step="0.1" value="0.8">
+            </div>
+
+            <div class="control-group">
+                <label>
+                    Estacionalidad
+                    <span class="value-display" id="seasonValue">Verano</span>
+                </label>
+                <input type="range" id="season" min="0" max="3" step="1" value="0">
+                <div style="font-size: 11px; color: #90caf9; margin-top: 5px;">
+                    0: Verano | 1: Otoño | 2: Invierno | 3: Primavera
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>
+                    Intensidad del Viento
+                    <span class="value-display" id="windValue">0.3</span>
+                </label>
+                <input type="range" id="wind" min="0" max="1" step="0.1" value="0.3">
+            </div>
+
+            <button id="resetBtn">Reiniciar Árbol</button>
+            <button id="animateBtn">Animar Crecimiento</button>
+
+            <div class="stats">
+                <div class="stat-item">
+                    <div class="stat-value" id="cubeCount">0</div>
+                    <div class="stat-label">Cubos Generados</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="dimFractal">0.00</div>
+                    <div class="stat-label">Dim. Fractal</div>
+                </div>
+            </div>
+
+            <div class="info-box">
+                <strong>Teoría de Mandelbrot:</strong> La dimensión fractal D se calcula como D = log(N) / log(1/r), donde N es el número de ramas y r es el factor de escala. Este árbol demuestra cómo pequeños cambios en r alteran dramáticamente la morfología fractal.
+            </div>
+        </div>
+    </div>
+
+    <!-- Vertex Shader -->
+    <script id="vertex-shader" type="x-shader/x-vertex">
+        #version 300 es
+        layout(location = 0) in vec3 aPosition;
+        layout(location = 1) in vec3 aNormal;
+        layout(location = 2) in vec4 aInstanceMatrix0;
+        layout(location = 3) in vec4 aInstanceMatrix1;
+        layout(location = 4) in vec4 aInstanceMatrix2;
+        layout(location = 5) in vec4 aInstanceMatrix3;
+        layout(location = 6) in vec3 aInstanceColor;
+
+        uniform mat4 uProjectionMatrix;
+        uniform mat4 uViewMatrix;
+        uniform float uTime;
+        uniform float uWindStrength;
+
+        out vec3 vNormal;
+        out vec3 vPosition;
+        out vec3 vColor;
+
+        void main() {
+            mat4 aInstanceMatrix = mat4(
+                aInstanceMatrix0,
+                aInstanceMatrix1,
+                aInstanceMatrix2,
+                aInstanceMatrix3
+            );
+
+            vec4 worldPosition = aInstanceMatrix * vec4(aPosition, 1.0);
+
+            // Efecto de viento fractal más realista
+            float windEffect = sin(uTime * 2.0 + worldPosition.y * 0.5 + worldPosition.x * 0.3) * uWindStrength;
+            windEffect *= (1.0 - abs(worldPosition.y) / 10.0);
+            worldPosition.x += windEffect * (worldPosition.y / 10.0);
+
+            gl_Position = uProjectionMatrix * uViewMatrix * worldPosition;
+            vNormal = mat3(aInstanceMatrix) * aNormal;
+            vPosition = worldPosition.xyz;
+            vColor = aInstanceColor;
+        }
+    </script>
+
+    <!-- Fragment Shader -->
+    <script id="fragment-shader" type="x-shader/x-fragment">
+        #version 300 es
+        precision mediump float;
+
+        in vec3 vNormal;
+        in vec3 vPosition;
+        in vec3 vColor;
+
+        uniform vec3 uLightPosition;
+        uniform vec3 uCameraPosition;
+
+        out vec4 fragColor;
+
+        void main() {
+            vec3 normal = normalize(vNormal);
+            vec3 lightDir = normalize(uLightPosition - vPosition);
+            vec3 viewDir = normalize(uCameraPosition - vPosition);
+            vec3 reflectDir = reflect(-lightDir, normal);
+
+            // Componente ambiental
+            vec3 ambient = 0.3 * vColor;
+
+            // Componente difusa
+            float diff = max(dot(normal, lightDir), 0.0);
+            vec3 diffuse = diff * vColor;
+
+            // Componente especular
+            float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32.0);
+            vec3 specular = vec3(0.5) * spec;
+
+            // Añadir ruido o variación de color para textura
+            float noise = fract(sin(dot(vPosition, vec3(12.9898, 78.233, 37.719))) * 43758.5453);
+            vec3 barkColor = mix(vColor * 0.7, vColor * 1.2, noise);
+
+            vec3 result = ambient + diffuse + specular;
+            fragColor = vec4(barkColor * result, 1.0);
+        }
+    </script>
+
+    <!-- Scripts externos -->
+    <script src="MVnew.js"></script>
+    <script src="initShaders.js"></script>
+    <script src="arbol.js"></script>
+</body>
+</html>
