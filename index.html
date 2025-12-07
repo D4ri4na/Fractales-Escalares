@@ -296,9 +296,44 @@
             
             vec4 worldPosition = aInstanceMatrix * vec4(aPosition, 1.0);
             
-            // Efecto de viento fractal
-            float windEffect = sin(uTime * 2.0 + worldPosition.y * 0.5) * uWindStrength;
-            worldPosition.x += windEffect * (worldPosition.y / 10.0);
+            // Efecto de viento realista con múltiples capas
+            if (uWindStrength != 0.0) {
+                // Viento afecta más a ramas más altas
+                float heightFactor = (worldPosition.y / 20.0);
+                heightFactor = clamp(heightFactor, 0.0, 1.0);
+                
+                // Onda principal lenta
+                float mainWave = sin(uTime * 0.5) * 0.6;
+                
+                // Onda secundaria más rápida
+                float secondaryWave = sin(uTime * 1.2) * 0.3 + sin(uTime * 0.8) * 0.2;
+                
+                // Turbulencia
+                float turbulence = sin(uTime * 2.5 + cos(uTime * 0.3)) * 0.15;
+                
+                // Ondulación vertical para movimiento más natural
+                float verticalOscillation = sin(uTime * 0.7 + worldPosition.z * 0.1) * 0.1;
+                
+                // Combinar todas las ondas
+                float totalWind = mainWave + secondaryWave + turbulence;
+                totalWind = clamp(totalWind, -1.0, 1.0);
+                
+                // Aplicar viento con cascada desde arriba hacia abajo
+                float windEffect = totalWind * uWindStrength * heightFactor;
+                
+                // Movimiento en X (izquierda-derecha)
+                worldPosition.x += windEffect * (worldPosition.y / 15.0) * 1.5;
+                
+                // Movimiento en Z (adelante-atrás) para más naturalidad
+                worldPosition.z += windEffect * (worldPosition.y / 20.0) * 0.7;
+                
+                // Movimiento vertical leve
+                worldPosition.y += verticalOscillation * uWindStrength * heightFactor * 0.3;
+                
+                // Ligera torsión para efecto de flexión
+                float twist = sin(uTime * 0.6 + worldPosition.y * 0.05) * uWindStrength * 0.1;
+                worldPosition.x += twist * (worldPosition.y / 10.0);
+            }
             
             gl_Position = uProjectionMatrix * uViewMatrix * worldPosition;
             vNormal = mat3(aInstanceMatrix) * aNormal;
@@ -327,14 +362,9 @@
             vec3 viewDir = normalize(uCameraPosition - vPosition);
             vec3 reflectDir = reflect(-lightDir, normal);
             
-            // Componente ambiental
             vec3 ambient = 0.3 * vColor;
-            
-            // Componente difusa
             float diff = max(dot(normal, lightDir), 0.0);
             vec3 diffuse = diff * vColor;
-            
-            // Componente especular
             float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32.0);
             vec3 specular = vec3(0.5) * spec;
             

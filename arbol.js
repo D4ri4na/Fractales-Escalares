@@ -316,16 +316,44 @@ var arbolPitagorico = function() {
         gl.uniformMatrix4fv(projectionMatrixLoc, false, flatten(projectionMatrix));
         gl.uniformMatrix4fv(modelViewMatrixLoc, false, flatten(viewMatrix));
         gl.uniform1f(timeLoc, time);
-        gl.uniform1f(windLoc, params.wind);
-        gl.uniform3fv(lightPosLoc, [40, 80, 50]); 
         
-        // Pasamos la posición dinámica de la cámara al shader
+        // Viento mejorado con múltiples capas de ondas
+        var windStrength = calculateRealisticWind(time, params.wind);
+        gl.uniform1f(windLoc, windStrength);
+        
+        gl.uniform3fv(lightPosLoc, [40, 80, 50]); 
         gl.uniform3fv(cameraPosLoc, [camX, camY, camZ]);
 
         renderInstanced(cylinderVertices, cylinderNormals, cylinderIndices, branchMatrices, branchColors);
         renderInstanced(leafVertices, leafNormals, leafIndices, leafMatrices, leafColors);
 
         requestAnimationFrame(render);
+    }
+
+    // Función para calcular viento realista con múltiples capas
+    function calculateRealisticWind(time, windIntensity) {
+        if (windIntensity === 0) return 0;
+
+        // Onda principal lenta y suave (raffagas principales)
+        var mainWind = Math.sin(time * 0.5) * 0.6;
+        
+        // Onda secundaria más rápida (movimiento natural del aire)
+        var secondaryWind = Math.sin(time * 1.2) * 0.3 + Math.sin(time * 0.8) * 0.2;
+        
+        // Onda terciaria para más complejidad (turbulencia)
+        var turbulence = Math.sin(time * 2.5 + Math.cos(time * 0.3)) * 0.15;
+        
+        // Variación aleatoria suave usando ruido Perlin aproximado
+        var randomNoise = Math.sin(time * 0.7 + 12.9898) * 0.1;
+        
+        // Combinar todas las ondas
+        var totalWind = mainWind + secondaryWind + turbulence + randomNoise;
+        
+        // Normalizar y aplicar intensidad
+        totalWind = Math.max(-1, Math.min(1, totalWind));
+        totalWind *= windIntensity;
+        
+        return totalWind;
     }
 
     function renderInstanced(vertices, normals, indices, matrices, colors) {
