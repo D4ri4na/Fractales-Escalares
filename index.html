@@ -179,6 +179,66 @@
             color: #64b5f6;
             font-size: 18px;
         }
+
+        /* Estilos del juego */
+        #gameOver {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 30px;
+            border-radius: 10px;
+            display: none;
+            z-index: 1000;
+        }
+        
+        #gameOver.active {
+            display: block;
+        }
+        
+        #gameOver h2 {
+            margin-bottom: 15px;
+            font-size: 22px;
+            color: #ff5252;
+        }
+        
+        #gameOver p {
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+        
+        #gameOver button {
+            background: #ff5252;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s;
+        }
+        
+        #gameOver button:hover {
+            background: #e04141;
+        }
+        
+        #windWarning {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(255, 255, 0, 0.8);
+            color: #333;
+            padding: 10px;
+            border-radius: 5px;
+            display: none;
+            z-index: 1000;
+        }
+        
+        #windWarning.active {
+            display: block;
+        }
     </style>
 </head>
 <body>
@@ -377,5 +437,71 @@
     <script src="MVnew.js"></script>
     <script src="initShaders.js"></script>
     <script src="arbol.js"></script>
+    
+    <!-- Script del juego integrado -->
+    <div id="gameOver">
+        <h2>Juego Terminado</h2>
+        <p id="gameOverReason"></p>
+        <p>Puntuación: <span id="finalScore">0</span></p>
+        <p>Días Sobrevividos: <span id="finalDays">0</span></p>
+        <button onclick="location.reload()">Reiniciar Juego</button>
+    </div>
+    
+    <div id="windWarning">
+        Advertencia: Viento fuerte activo
+    </div>
+    
+    <script>
+        // Estado del juego
+        var gameState = {
+            isPlaying: false,
+            score: 0,
+            maxScore: localStorage.getItem('maxScore') ? parseInt(localStorage.getItem('maxScore')) : 0,
+            windEvent: false,
+            windIntensity: 0,
+            daysAlive: 0
+        };
+        
+        // Actualizar la interfaz del juego
+        function updateGameUI() {
+            document.getElementById('scoreDisplay').textContent = 'Puntos: ' + Math.floor(gameState.score);
+            document.getElementById('daysAlive').textContent = gameState.daysAlive;
+            
+            var windWarn = document.getElementById('windWarning');
+            if (gameState.windEvent && gameState.windIntensity > 0.3) {
+                windWarn.classList.add('active');
+            } else {
+                windWarn.classList.remove('active');
+            }
+        }
+        
+        function endGame(reason) {
+            gameState.isPlaying = false;
+            document.getElementById('gameOverReason').textContent = reason;
+            document.getElementById('finalScore').textContent = 'Puntuación: ' + Math.floor(gameState.score);
+            document.getElementById('finalDays').textContent = gameState.daysAlive;
+            
+            if (gameState.score > gameState.maxScore) {
+                gameState.maxScore = Math.floor(gameState.score);
+                localStorage.setItem('maxScore', gameState.maxScore.toString());
+                document.getElementById('maxScore').textContent = gameState.maxScore;
+            }
+            
+            document.getElementById('gameOver').classList.add('active');
+        }
+        
+        // Integración con el game loop de render
+        var lastGameUpdate = Date.now();
+        var originalRender = window.requestAnimationFrame;
+        
+        setInterval(function() {
+            if (gameState.isPlaying) {
+                var now = Date.now();
+                var deltaTime = (now - lastGameUpdate) / 1000;
+                lastGameUpdate = now;
+                updateGame(deltaTime);
+            }
+        }, 100);
+    </script>
 </body>
 </html>

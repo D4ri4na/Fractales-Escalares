@@ -66,7 +66,7 @@ var arbolPitagorico = function() {
         }
 
         gl.viewport(0, 0, canvas.width, canvas.height);
-        gl.clearColor(0.92, 0.92, 0.95, 1.0); 
+        gl.clearColor(0.05, 0.1, 0.2, 1.0); 
         gl.enable(gl.DEPTH_TEST);
         gl.disable(gl.CULL_FACE); 
 
