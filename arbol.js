@@ -11,8 +11,10 @@ var arbolPitagorico = function() {
     // Arrays para instancias
     var branchMatrices = [];
     var branchColors = [];
+    var branchDepths = [];
     var leafMatrices = [];
     var leafColors = [];
+    var leafDepths = [];
 
     // Parámetros del árbol
     var params = {
@@ -23,33 +25,36 @@ var arbolPitagorico = function() {
         wind: 0.0,
         branchCount: 2,
         leafDensity: 0.9,
-        randomness: 0.15
+        randomness: 0.15,
+        fractalDim: "Calculando..."
     };
 
     // Cámara
     var camera = {
         position: [0, 15, 50],
         rotation: [0, 0],
-        distance: 50
+        distance: 50,
+        autoRotate: true
     };
 
     // Control de mouse
     var isDragging = false;
     var lastMouse = [0, 0];
     var startTime = Date.now();
+    var animatingTime = 0;
 
     var seasonColors = {
         branch: [0.4, 0.25, 0.1], 
         leaf: [
-            [0.2, 0.7, 0.2],      // Verano
-            [0.9, 0.45, 0.1],     // Otoño
-            [0.4, 0.3, 0.2],      // Invierno
-            [0.95, 0.7, 0.8]      // Primavera
+            [0.2, 0.7, 0.2],      // Verano - verde
+            [0.9, 0.45, 0.1],     // Otoño - naranja
+            [1.0, 1.0, 1.0],      // Invierno - blanco puro
+            [0.95, 0.7, 0.8]      // Primavera - rosa pastel
         ]
     };
 
     var modelViewMatrixLoc, projectionMatrixLoc;
-    var timeLoc, windLoc, lightPosLoc, cameraPosLoc;
+    var timeLoc, windLoc, lightPosLoc, cameraPosLoc, maxDepthLoc;
 
     window.onload = function init() {
         var canvas = document.getElementById("gl-canvas");
@@ -90,30 +95,34 @@ var arbolPitagorico = function() {
         windLoc = gl.getUniformLocation(program, "uWindStrength");
         lightPosLoc = gl.getUniformLocation(program, "uLightPosition");
         cameraPosLoc = gl.getUniformLocation(program, "uCameraPosition");
+        maxDepthLoc = gl.getUniformLocation(program, "uMaxDepth");
     }
 
     function initGeometry() {
-        // --- CILINDRO PARA RAMAS ---
+        // --- CILINDRO CÓNICO PARA RAMAS REALISTAS ---
         var segments = 24;
-        var radius = 0.5; 
+        var baseRadius = 0.5;
+        var topRadius = 0.15;
         var height = 1.0;
 
         var bVerts = [], bNorms = [], bInds = [];
 
+        // Generar vértices con radio variable (cilindro cónico)
         for (var i = 0; i <= segments; i++) {
             var angle = (i / segments) * Math.PI * 2;
             var c = Math.cos(angle);
             var s = Math.sin(angle);
 
-            // Base inferior
-            bVerts.push(c * radius, -height/2, s * radius);
+            // Base (radio completo)
+            bVerts.push(c * baseRadius, -height/2, s * baseRadius);
             bNorms.push(c, 0, s);
 
-            // Tope superior (sin afinamiento)
-            bVerts.push(c * radius, height/2, s * radius);
-            bNorms.push(c, 0, s);
+            // Tope (radio reducido - afinamiento)
+            bVerts.push(c * topRadius, height/2, s * topRadius);
+            bNorms.push(c, 0.3, s); // Normal ligeramente inclinada para efecto cónico
         }
 
+        // Caras laterales del cono
         for (var i = 0; i < segments; i++) {
             var p1 = i * 2;
             var p2 = p1 + 1;
@@ -124,7 +133,7 @@ var arbolPitagorico = function() {
             bInds.push(p3, p2, p4);
         }
 
-        // Tapas superior e inferior
+        // Tapa inferior (círculo completo)
         var bottomIdx = bVerts.length / 3;
         bVerts.push(0, -height/2, 0);
         bNorms.push(0, -1, 0);
@@ -134,6 +143,7 @@ var arbolPitagorico = function() {
             bInds.push(bottomIdx, idx2, idx1);
         }
 
+        // Tapa superior (círculo pequeño)
         var topIdx = bVerts.length / 3;
         bVerts.push(0, height/2, 0);
         bNorms.push(0, 1, 0);
@@ -147,15 +157,27 @@ var arbolPitagorico = function() {
         cylinderNormals = new Float32Array(bNorms);
         cylinderIndices = new Uint16Array(bInds);
 
-        // --- HOJAS ---
+        // --- HOJAS MEJORADAS (Forma de hoja realista) ---
         var lVerts = [
-            0, -0.5, 0,   // Base
-            -0.4, 0.2, 0.1, // Izquierda
-            0.4, 0.2, 0.1,  // Derecha
-            0, 0.8, 0     // Punta
+            0, -0.6, 0,      // Base
+            -0.3, -0.2, 0.05,   // Lado izquierdo
+            -0.35, 0.3, 0.08,   // Mitad izquierda
+            -0.2, 0.7, 0.1,     // Cuarto superior izquierdo
+            0, 0.9, 0.12,       // Punta
+            0.2, 0.7, 0.1,      // Cuarto superior derecho
+            0.35, 0.3, 0.08,    // Mitad derecha
+            0.3, -0.2, 0.05     // Lado derecho
         ];
-        var lNorms = [0,0,1, 0,0,1, 0,0,1, 0,0,1];
-        var lInds = [0,2,1, 1,2,3, 0,1,2, 3,2,1];
+        
+        var lNorms = [];
+        for (var i = 0; i < lVerts.length; i += 3) {
+            lNorms.push(0, 0, 1);
+        }
+        
+        var lInds = [
+            0,1,2, 0,2,3, 0,3,4, 0,4,5, 0,5,6, 0,6,7,
+            1,2,7, 2,3,7, 3,4,7, 4,5,7, 5,6,7
+        ];
 
         leafVertices = new Float32Array(lVerts);
         leafNormals = new Float32Array(lNorms);
@@ -187,41 +209,58 @@ var arbolPitagorico = function() {
     function generateTree() {
         branchMatrices = [];
         branchColors = [];
+        branchDepths = [];
         leafMatrices = [];
         leafColors = [];
+        leafDepths = [];
 
         var trunkHeight = 10.0;
-        var trunkWidth = 0.6;
+        var trunkBaseWidth = 0.8;  // Tronco más grueso
         
-        // Tronco recto y más grueso
+        // Tronco cónico realista
         var trunk = createTransformMatrix(
             [0, trunkHeight/2, 0], 
-            [trunkWidth, trunkHeight, trunkWidth], 
+            [trunkBaseWidth, trunkHeight, trunkBaseWidth],
             0, 0, 0
         );
         branchMatrices.push(...trunk);
-        branchColors.push(...seasonColors.branch);
+        branchColors.push(...[0.3, 0.15, 0.05]); // Color madera oscura
+        branchDepths.push(0);
 
-        // Generar 8 conjuntos de ramas radiales desde la parte superior
-        var initialLength = 4.5;
+        // Ramas primarias desde la copa
+        var initialLength = 4.0;
         var numRadialPlanes = 8;
+        
         for (var i = 0; i < numRadialPlanes; i++) {
             var planeRotation = (i / numRadialPlanes) * Math.PI * 2;
-            drawBranch([0, trunkHeight, 0], initialLength, params.depth, 0, planeRotation);
+            
+            // Pequeña variación vertical para naturalidad
+            var verticalOffset = 0.5 - Math.random() * 1.0;
+            
+            drawBranch(
+                [0, trunkHeight + verticalOffset, 0],
+                initialLength,
+                params.depth,
+                0,
+                planeRotation,
+                0
+            );
         }
 
         updateStats();
     }
 
-    function drawBranch(startPos, length, depth, rotation, planeRotation) {
+    function drawBranch(startPos, length, depth, rotation, planeRotation, currentDepth) {
         if (depth === 0) return;
 
         var randomRotation = (Math.random() - 0.5) * params.randomness;
         rotation += randomRotation;
 
-        var branchWidth = 0.40;
+        // Grosor variable según profundidad (ramas más finas conforme avanzan)
+        var depthFactor = Math.pow(params.scaleFactor, params.depth - depth);
+        var branchWidth = 0.45 * depthFactor; // Base del cilindro se reduce
 
-        // Calcular posición final en base al plano de rotación
+        // Calcular posición final
         var cosPlane = Math.cos(planeRotation);
         var sinPlane = Math.sin(planeRotation);
 
@@ -237,55 +276,79 @@ var arbolPitagorico = function() {
         var midY = (startPos[1] + endY) / 2;
         var midZ = (startPos[2] + endZ) / 2;
 
-        // Calcular ángulos de rotación correctamente
+        // Ángulos de orientación
         var vertAngle = Math.atan2(
             Math.sqrt(dirX * dirX + dirZ * dirZ),
             dirY
         );
         var horAngle = Math.atan2(dirZ, dirX);
 
+        // Escala con afinamiento cónico
         var matrix = createTransformMatrix(
-    [midX, midY, midZ],
-    [branchWidth, length, branchWidth],
-    vertAngle,
-    horAngle,
-    0
-);
+            [midX, midY, midZ],
+            [branchWidth, length, branchWidth],
+            vertAngle,
+            horAngle,
+            0
+        );
 
-
-        // Color con degradado
-        var depthRatio = 1 - (depth / params.depth);
+        // Color con degradado realista (oscurecer hacia las puntas)
+        var depthRatio = depth / params.depth;
         var branchColor = [
-            Math.min(seasonColors.branch[0] + depthRatio * 0.2, 1.0),
-            Math.min(seasonColors.branch[1] + depthRatio * 0.25, 1.0),
-            Math.min(seasonColors.branch[2] + depthRatio * 0.15, 1.0)
+            Math.max(seasonColors.branch[0] * (0.6 + depthRatio * 0.4), 0.2),
+            Math.max(seasonColors.branch[1] * (0.5 + depthRatio * 0.5), 0.1),
+            Math.max(seasonColors.branch[2] * (0.4 + depthRatio * 0.6), 0.05)
         ];
 
         branchMatrices.push(...matrix);
         branchColors.push(...branchColor);
+        branchDepths.push(currentDepth);
 
-        // Hojas
-        if (depth <= 4 && Math.random() < params.leafDensity) {
-            var leafScale = 0.8 + Math.random() * 0.4;
+        // Hojas distribuidas más naturalmente
+        if (depth <= 5 && Math.random() < params.leafDensity * (1 - depth/10)) {
+            var leafScale = 0.6 + Math.random() * 0.5;
+            var leafProgress = Math.random();
+            var leafX = startPos[0] + dirX * leafProgress;
+            var leafY = startPos[1] + dirY * leafProgress;
+            var leafZ = startPos[2] + dirZ * leafProgress;
+            
             var leafMatrix = createTransformMatrix(
-                [endX, endY, endZ],
-                [leafScale, leafScale, leafScale],
-                Math.random() * Math.PI, 
-                Math.random() * Math.PI, 
-                Math.random() * Math.PI
+                [leafX, leafY, leafZ],
+                [leafScale, leafScale, leafScale * 0.8],
+                (Math.random() - 0.5) * Math.PI * 0.5,
+                rotation + (Math.random() - 0.5) * Math.PI * 0.3,
+                Math.random() * Math.PI * 0.4
             );
             leafMatrices.push(...leafMatrix);
             
             var leafColor = seasonColors.leaf[params.season];
             leafColors.push(...leafColor);
+            leafDepths.push(currentDepth);
         }
 
-        // Recursión
+        // Recursión con bifurcación natural
         var newLength = length * params.scaleFactor;
         var angleRad = params.angle * Math.PI / 180;
 
-        drawBranch([endX, endY, endZ], newLength, depth - 1, rotation + angleRad, planeRotation);
-        drawBranch([endX, endY, endZ], newLength, depth - 1, rotation - angleRad, planeRotation);
+        // Rama derecha
+        drawBranch(
+            [endX, endY, endZ],
+            newLength,
+            depth - 1,
+            rotation + angleRad,
+            planeRotation,
+            currentDepth + 1
+        );
+
+        // Rama izquierda
+        drawBranch(
+            [endX, endY, endZ],
+            newLength,
+            depth - 1,
+            rotation - angleRad,
+            planeRotation,
+            currentDepth + 1
+        );
     }
 
     function render() {
@@ -323,9 +386,10 @@ var arbolPitagorico = function() {
         
         gl.uniform3fv(lightPosLoc, [40, 80, 50]); 
         gl.uniform3fv(cameraPosLoc, [camX, camY, camZ]);
+        gl.uniform1f(maxDepthLoc, params.depth);
 
-        renderInstanced(cylinderVertices, cylinderNormals, cylinderIndices, branchMatrices, branchColors);
-        renderInstanced(leafVertices, leafNormals, leafIndices, leafMatrices, leafColors);
+        renderInstanced(cylinderVertices, cylinderNormals, cylinderIndices, branchMatrices, branchColors, branchDepths);
+        renderInstanced(leafVertices, leafNormals, leafIndices, leafMatrices, leafColors, leafDepths);
 
         requestAnimationFrame(render);
     }
@@ -356,7 +420,7 @@ var arbolPitagorico = function() {
         return totalWind;
     }
 
-    function renderInstanced(vertices, normals, indices, matrices, colors) {
+    function renderInstanced(vertices, normals, indices, matrices, colors, depths) {
         if (matrices.length === 0) return;
 
         var vao = gl.createVertexArray();
@@ -391,6 +455,14 @@ var arbolPitagorico = function() {
         gl.vertexAttribPointer(6, 3, gl.FLOAT, false, 0, 0);
         gl.vertexAttribDivisor(6, 1);
 
+        // Nuevo: Buffer de profundidad
+        var depthBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, depthBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(depths), gl.DYNAMIC_DRAW);
+        gl.enableVertexAttribArray(7);
+        gl.vertexAttribPointer(7, 1, gl.FLOAT, false, 0, 0);
+        gl.vertexAttribDivisor(7, 1);
+
         var indexBuffer = gl.createBuffer();
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
         gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
@@ -421,8 +493,6 @@ var arbolPitagorico = function() {
         setupInput('scaleFactor', 'scaleFactor', true);
         setupInput('angle', 'angle', false, '°');
         setupInput('depth', 'depth', false);
-        setupInput('branchCount', 'branchCount', false);
-        setupInput('leafDensity', 'leafDensity', true);
         setupInput('wind', 'wind', true);
 
         var seasonInput = document.getElementById('season');
@@ -495,8 +565,10 @@ var arbolPitagorico = function() {
         var N = Math.pow(2, params.depth);
         var r = params.scaleFactor;
         var D = -Math.log(N) / Math.log(r); 
+        params.fractalDim = D.toFixed(3);
+        
         var elD = document.getElementById('dimFractal');
-        if(elD) elD.textContent = Math.abs(D).toFixed(2);
+        if(elD) elD.textContent = params.fractalDim;
     }
 
     function perspective(fovy, aspect, near, far) {
